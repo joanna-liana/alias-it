@@ -15,7 +15,7 @@ type AliasCLI struct {
 func (cli AliasCLI) Add() {
 	command, aliasName := parseArgs()
 
-	shellConfigPath := getShellConfigPath()
+	shellConfigPath := getShellConfigPath(cli.homeDirResolver)
 
 	addAlias(aliasName, command, shellConfigPath)
 }
@@ -38,11 +38,12 @@ func parseArgs() (string, string) {
 	return command, aliasName
 }
 
-func getShellConfigPath() string {
-	homeDir, err := os.UserHomeDir()
+func getShellConfigPath(homeDirResolver HomeDirResolver) string {
+	homeDir, err := homeDirResolver()
 
 	if err != nil {
 		fmt.Println(err)
+		panic(err)
 	}
 
 	shellConfigPath := path.Join(homeDir, ".zshrc")
