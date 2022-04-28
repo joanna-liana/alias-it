@@ -24,8 +24,49 @@ func setUp() {
 	os.Mkdir(HOME_DIR, 0777)
 }
 
+func TestCLI(t *testing.T) {
+	t.Run("Appends an alias to the shell config file", func(t *testing.T) {
+		// given
+		os.Args = []string{"TEST_CMD", "testAliasName", "echo $PWD"}
+
+		aliasFilePath := path.Join(HOME_DIR, ".zshrc")
+
+		f, err := os.Create(aliasFilePath)
+
+		if err != nil {
+			panic(err)
+		}
+
+		defer f.Close()
+
+		if _, err := f.WriteString("lorem\nipsum"); err != nil {
+			panic(err)
+		}
+
+		homeDirResolver := func() (string, error) {
+			return HOME_DIR, nil
+		}
+
+		aliasCli := cli.New(homeDirResolver)
+
+		want := "alias testAliasName=\"echo $PWD\""
+
+		// when
+		aliasCli.Add()
+
+		// then
+		got := getLastLine(aliasFilePath, t)
+
+		if want != got {
+			t.Errorf("Want %q, got %q", want, got)
+		}
+	})
+}
+
 // based on https://stackoverflow.com/a/51328256/12938569
-func getLastLine(filepath string) string {
+func getLastLine(filepath string, t *testing.T) string {
+	t.Helper()
+
 	fileHandle, err := os.Open(filepath)
 
 	if err != nil {
@@ -64,43 +105,4 @@ func getLastLine(filepath string) string {
 	}
 
 	return line
-}
-
-func TestCLI(t *testing.T) {
-	t.Run("Appends an alias to the shell config file", func(t *testing.T) {
-		// given
-		os.Args = []string{"TEST_CMD", "testAliasName", "echo $PWD"}
-
-		aliasFilePath := path.Join(HOME_DIR, ".zshrc")
-
-		f, err := os.Create(aliasFilePath)
-
-		if err != nil {
-			panic(err)
-		}
-
-		defer f.Close()
-
-		if _, err := f.WriteString("lorem\nipsum"); err != nil {
-			panic(err)
-		}
-
-		homeDirResolver := func() (string, error) {
-			return HOME_DIR, nil
-		}
-
-		aliasCli := cli.New(homeDirResolver)
-
-		want := "alias testAliasName=\"echo $PWD\""
-
-		// when
-		aliasCli.Add()
-
-		// then
-		got := getLastLine(aliasFilePath)
-
-		if want != got {
-			t.Errorf("Want %q, got %q", want, got)
-		}
-	})
 }
