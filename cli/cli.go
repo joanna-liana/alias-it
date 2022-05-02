@@ -32,8 +32,8 @@ func parseArgs() (string, string) {
 	commandParts := os.Args[2:]
 	command := strings.Join(commandParts, " ")
 
-	fmt.Printf("Alias name: %s\n", aliasName)
-	fmt.Printf("Command: %s\n", command)
+	fmt.Printf("🏡 Alias name:\t%s\n", aliasName)
+	fmt.Printf("💻 Command:\t%s\n", command)
 
 	return command, aliasName
 }
@@ -72,4 +72,5 @@ func addAlias(name, command, shellConfigPath string) {
 
 	fmt.Printf("\nAdded alias:%v\n\n", aliasString)
 	fmt.Println("Hint: to prevent variable expansion, remember about prepending $ with a slash, e.g. $PWD -> \\$PWD")
+	fmt.Println("\n👉 Remember to run \"source ~/.zshrc\" or open a new terminal tab to start using your alias")
 }
