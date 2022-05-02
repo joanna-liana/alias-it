@@ -2,17 +2,29 @@ package cli_test
 
 import (
 	"alias_it/cli"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"path"
+	"strings"
 	"testing"
 )
 
-var HOME_DIR = "test_home"
+const HOME_DIR = "test_home"
+const ORIGINAL_LAST_LINE = "<add alias after this line>"
+
+var homeDirResolver = func() (string, error) {
+	return HOME_DIR, nil
+}
+
+var ALIAS_FILE_PATH = path.Join(HOME_DIR, ".zshrc")
+
+var output bytes.Buffer
 
 func TestMain(m *testing.M) {
 	setUp()
+
 	// exec test and this returns an exit code to pass to os
 	exitCode := m.Run()
 
@@ -29,25 +41,9 @@ func TestCLI(t *testing.T) {
 		// given
 		os.Args = []string{"TEST_CMD", "testAliasName", "echo $PWD"}
 
-		aliasFilePath := path.Join(HOME_DIR, ".zshrc")
+		createNonEmptyConfig(t)
 
-		f, err := os.Create(aliasFilePath)
-
-		if err != nil {
-			panic(err)
-		}
-
-		defer f.Close()
-
-		if _, err := f.WriteString("lorem\nipsum"); err != nil {
-			panic(err)
-		}
-
-		homeDirResolver := func() (string, error) {
-			return HOME_DIR, nil
-		}
-
-		aliasCli := cli.New(homeDirResolver)
+		aliasCli := cli.New(&output, homeDirResolver)
 
 		want := "alias testAliasName=\"echo $PWD\""
 
@@ -55,12 +51,86 @@ func TestCLI(t *testing.T) {
 		aliasCli.Add()
 
 		// then
-		got := getLastLine(aliasFilePath, t)
+		got := getLastLine(ALIAS_FILE_PATH, t)
 
 		if want != got {
 			t.Errorf("Want %q, got %q", want, got)
 		}
 	})
+
+	missingArgsCases := []struct {
+		warning string
+		cmdArgs []string
+	}{
+		{
+			warning: "missing alias name",
+			cmdArgs: []string{},
+		},
+		{
+			warning: "missing command",
+			cmdArgs: []string{"testAliasName"},
+		},
+	}
+
+	for _, tt := range missingArgsCases {
+		t.Run("Warns about missing args - "+tt.warning, func(t *testing.T) {
+			// given
+			os.Args = []string{"TEST_CMD"}
+			os.Args = append(os.Args, tt.cmdArgs...)
+
+			aliasCli := cli.New(&output, homeDirResolver)
+
+			want := tt.warning
+
+			// when
+			aliasCli.Add()
+
+			// then
+			got := output.String()
+
+			if !strings.Contains(got, want) {
+				t.Errorf("Wanted\n%q\nto contain\n%q", got, want)
+			}
+		})
+
+		t.Run("Does not add any alias if args are missing - "+tt.warning, func(t *testing.T) {
+			// given
+			createNonEmptyConfig(t)
+
+			os.Args = []string{"TEST_CMD"}
+			os.Args = append(os.Args, tt.cmdArgs...)
+
+			aliasCli := cli.New(&output, homeDirResolver)
+
+			want := ORIGINAL_LAST_LINE
+
+			// when
+			aliasCli.Add()
+
+			// then
+			got := getLastLine(ALIAS_FILE_PATH, t)
+
+			if want != got {
+				t.Errorf("Want %q, got %q", want, got)
+			}
+		})
+	}
+}
+
+func createNonEmptyConfig(t *testing.T) {
+	t.Helper()
+
+	f, err := os.Create(ALIAS_FILE_PATH)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer f.Close()
+
+	if _, err := f.WriteString(ORIGINAL_LAST_LINE); err != nil {
+		panic(err)
+	}
 }
 
 // based on https://stackoverflow.com/a/51328256/12938569

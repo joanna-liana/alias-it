@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strings"
@@ -10,39 +12,63 @@ import (
 type HomeDirResolver = func() (string, error)
 type AliasCLI struct {
 	homeDirResolver HomeDirResolver
+	printer         io.Writer
 }
 
 func (cli AliasCLI) Add() {
-	command, aliasName := parseArgs()
+	command, aliasName, err := cli.parseArgs()
 
-	shellConfigPath := getShellConfigPath(cli.homeDirResolver)
+	if err != nil {
+		if err.Error() == "insufficient args" {
+			return
+		}
 
-	addAlias(aliasName, command, shellConfigPath)
+		panic(err)
+	}
+
+	shellConfigPath := cli.getShellConfigPath(cli.homeDirResolver)
+
+	cli.addAlias(aliasName, command, shellConfigPath)
 }
 
-func New(homeDirResolver HomeDirResolver) *AliasCLI {
+func New(printer io.Writer, homeDirResolver HomeDirResolver) *AliasCLI {
 
 	return &AliasCLI{
 		homeDirResolver: homeDirResolver,
+		printer:         printer,
 	}
 }
 
-func parseArgs() (string, string) {
+func (cli AliasCLI) parseArgs() (string, string, error) {
+	if len(os.Args) < 3 {
+		var errorString string
+
+		if len(os.Args) < 2 {
+			errorString = "missing alias name"
+		} else {
+			errorString = "missing command"
+		}
+
+		fmt.Fprintln(cli.printer, "Error:\t", errorString, "\nUsage:\t alias-it <alias_name> <command_name>")
+
+		return "", "", errors.New("insufficient args")
+	}
+
 	aliasName := os.Args[1]
 	commandParts := os.Args[2:]
 	command := strings.Join(commandParts, " ")
 
-	fmt.Printf("🏡 Alias name:\t%s\n", aliasName)
-	fmt.Printf("💻 Command:\t%s\n", command)
+	fmt.Fprintf(cli.printer, "🏡 Alias name:\t%s\n", aliasName)
+	fmt.Fprintf(cli.printer, "💻 Command:\t%s\n", command)
 
-	return command, aliasName
+	return command, aliasName, nil
 }
 
-func getShellConfigPath(homeDirResolver HomeDirResolver) string {
+func (cli AliasCLI) getShellConfigPath(homeDirResolver HomeDirResolver) string {
 	homeDir, err := homeDirResolver()
 
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(cli.printer, err)
 		panic(err)
 	}
 
@@ -51,26 +77,26 @@ func getShellConfigPath(homeDirResolver HomeDirResolver) string {
 	return shellConfigPath
 }
 
-func appendToShellConfig(shellConfigPath string, toAppend string) {
+func (cli AliasCLI) appendToShellConfig(shellConfigPath string, toAppend string) {
 	f, err := os.OpenFile(shellConfigPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(cli.printer, err)
 	}
 
 	defer f.Close()
 
 	if _, err := f.WriteString(toAppend); err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(cli.printer, err)
 	}
 }
 
-func addAlias(name, command, shellConfigPath string) {
+func (cli AliasCLI) addAlias(name, command, shellConfigPath string) {
 	aliasString := "\nalias " + name + "=\"" + command + "\""
 
-	appendToShellConfig(shellConfigPath, aliasString)
+	cli.appendToShellConfig(shellConfigPath, aliasString)
 
-	fmt.Printf("\nAdded alias:%v\n\n", aliasString)
-	fmt.Println("Hint: to prevent variable expansion, remember about prepending $ with a slash, e.g. $PWD -> \\$PWD")
-	fmt.Println("\n👉 Remember to run \"source ~/.zshrc\" or open a new terminal tab to start using your alias")
+	fmt.Fprintf(cli.printer, "\nAdded alias:%v\n\n", aliasString)
+	fmt.Fprintln(cli.printer, "Hint: to prevent variable expansion, remember about prepending $ with a slash, e.g. $PWD -> \\$PWD")
+	fmt.Fprintln(cli.printer, "\n👉 Remember to run \"source ~/.zshrc\" or open a new terminal tab to start using your alias")
 }

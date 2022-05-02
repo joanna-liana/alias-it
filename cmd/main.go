@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	cli := cli.New(os.UserHomeDir)
+	cli := cli.New(os.Stdout, os.UserHomeDir)
 
 	cli.Add()
 }
