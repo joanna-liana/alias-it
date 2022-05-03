@@ -25,15 +25,19 @@ var output bytes.Buffer
 func TestMain(m *testing.M) {
 	setUp()
 
-	// exec test and this returns an exit code to pass to os
 	exitCode := m.Run()
 
+	cleanUp()
 	os.Exit(exitCode)
 }
 
 func setUp() {
 	os.RemoveAll(HOME_DIR)
 	os.Mkdir(HOME_DIR, 0777)
+}
+
+func cleanUp() {
+	os.RemoveAll(HOME_DIR)
 }
 
 func TestCLI(t *testing.T) {
