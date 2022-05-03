@@ -51,11 +51,7 @@ func TestCLI(t *testing.T) {
 		aliasCli.Add()
 
 		// then
-		got := getLastLine(ALIAS_FILE_PATH, t)
-
-		if want != got {
-			t.Errorf("Want %q, got %q", want, got)
-		}
+		assertAppendedAlias(want, t)
 	})
 
 	missingArgsCases := []struct {
@@ -133,6 +129,33 @@ func createNonEmptyConfig(t *testing.T) {
 	}
 }
 
+func assertAppendedAlias(aliasLine string, t *testing.T) {
+	t.Helper()
+
+	assertFileSize(aliasLine, t)
+	assertAliasHasBeenSaved(aliasLine, t)
+
+}
+
+func assertAliasHasBeenSaved(want string, t *testing.T) {
+	got := getLastLine(ALIAS_FILE_PATH, t)
+
+	if want != got {
+		t.Errorf("Want %q, got %q", want, got)
+	}
+}
+
+func assertFileSize(appendedLine string, t *testing.T) {
+	t.Helper()
+
+	want := getFileSize(ALIAS_FILE_PATH, t)
+	got := len(ORIGINAL_LAST_LINE) + len(appendedLine)
+
+	if want <= got {
+		t.Fatal("Wanted the content of the config file to grow, not get replaced")
+	}
+}
+
 // based on https://stackoverflow.com/a/51328256/12938569
 func getLastLine(filepath string, t *testing.T) string {
 	t.Helper()
@@ -175,4 +198,16 @@ func getLastLine(filepath string, t *testing.T) string {
 	}
 
 	return line
+}
+
+func getFileSize(filepath string, t *testing.T) int {
+	t.Helper()
+
+	stat, err := os.Stat(filepath)
+
+	if err != nil {
+		panic(err)
+	}
+
+	return int(stat.Size())
 }
