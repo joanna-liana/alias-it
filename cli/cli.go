@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
 )
@@ -26,9 +28,36 @@ func (cli AliasCLI) Add() {
 		panic(err)
 	}
 
+	err = cli.ensureSupportedShell()
+
+	if err != nil {
+		if err.Error() == "unsupported shell, only ZSH is supported for now" {
+			return
+		}
+
+		panic(err)
+	}
+
 	shellConfigPath := cli.getShellConfigPath(cli.homeDirResolver)
 
 	cli.addAlias(aliasName, command, shellConfigPath)
+}
+
+func (cli AliasCLI) ensureSupportedShell() error {
+	supportedShellSuffix := "/zsh\n"
+	shellPath, _ := exec.Command("echo", os.ExpandEnv("$SHELL")).Output()
+
+	errorString := "unsupported shell, only ZSH is supported for now"
+
+	isUsingSupportedShell := bytes.HasSuffix(shellPath, []byte(supportedShellSuffix))
+
+	if !isUsingSupportedShell {
+		cli.println("Error:\t", errorString)
+
+		return errors.New(errorString)
+	}
+
+	return nil
 }
 
 func New(printer io.Writer, homeDirResolver HomeDirResolver) *AliasCLI {
@@ -93,6 +122,9 @@ func (cli AliasCLI) appendToShellConfig(shellConfigPath string, toAppend string)
 
 func (cli AliasCLI) addAlias(name, command, shellConfigPath string) {
 	aliasString := "\nalias " + name + "=\"" + command + "\""
+
+	fmt.Println("shellConfigPath", shellConfigPath)
+	fmt.Println("aliasString", aliasString)
 
 	cli.appendToShellConfig(shellConfigPath, aliasString)
 

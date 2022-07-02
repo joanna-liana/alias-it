@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
 	"testing"
@@ -14,7 +15,8 @@ import (
 const ORIGINAL_LAST_LINE = "<add alias after this line>"
 
 var HOME_DIR string
-var ALIAS_FILE_PATH string
+var ZSH_ALIAS_FILE_PATH string
+var UNSUPPORTED_SHELL_ALIAS_FILE_PATH string
 
 var homeDirResolver = func() (string, error) {
 	return HOME_DIR, nil
@@ -23,23 +25,61 @@ var homeDirResolver = func() (string, error) {
 var output bytes.Buffer
 
 func TestCLI(t *testing.T) {
-	t.Run("Appends an alias to the shell config file", func(t *testing.T) {
+	supportedShellPaths := []string{
+		"/bin/zsh",
+		"/usr/bin/zsh",
+	}
+
+	for _, shellPath := range supportedShellPaths {
+		t.Run("Appends an alias to the shell config file (ZSH)", func(t *testing.T) {
+			// given
+			os.Setenv("SHELL", shellPath)
+			setUpPaths(t)
+			setValidCliArgs()
+
+			createNonEmptyConfig(t)
+
+			aliasCli := cli.New(&output, homeDirResolver)
+
+			want := "alias testAliasName=\"echo $PWD\""
+
+			// when
+			aliasCli.Add()
+
+			// then
+			assertAppendedAlias(want, t)
+		})
+	}
+
+	t.Run("Does not add any alias if the shell is not ZSH", func(t *testing.T) {
 		// given
+		setValidCliArgs()
+
+		setUpEnv(t)
 		setUpPaths(t)
-
-		os.Args = []string{"TEST_CMD", "testAliasName", "echo $PWD"}
-
 		createNonEmptyConfig(t)
+
+		os.Setenv("SHELL", "")
+
+		out, _ := exec.Command("echo", os.ExpandEnv("$SHELL")).Output()
+
+		fmt.Println(string(out))
 
 		aliasCli := cli.New(&output, homeDirResolver)
 
-		want := "alias testAliasName=\"echo $PWD\""
+		want := "unsupported shell"
 
 		// when
 		aliasCli.Add()
 
 		// then
-		assertAppendedAlias(want, t)
+		got := output.String()
+
+		if !strings.Contains(got, want) {
+			t.Errorf("Wanted\n%q\nto contain\n%q", got, want)
+		}
+
+		assertNoAliasAdded(t)
 	})
 
 	missingArgsCases := []struct {
@@ -87,34 +127,39 @@ func TestCLI(t *testing.T) {
 
 			aliasCli := cli.New(&output, homeDirResolver)
 
-			want := ORIGINAL_LAST_LINE
-
 			// when
 			aliasCli.Add()
 
 			// then
-			got := getLastLine(ALIAS_FILE_PATH, t)
-
-			if want != got {
-				t.Errorf("Want %q, got %q", want, got)
-			}
+			assertNoAliasAdded(t)
 		})
 	}
+}
+
+func setValidCliArgs() {
+	os.Args = []string{"TEST_CMD", "testAliasName", "echo $PWD"}
+}
+
+func setUpEnv(t *testing.T) {
+	t.Helper()
+
+	os.Setenv("SHELL", "/bin/zsh")
 }
 
 func setUpPaths(t *testing.T) {
 	t.Helper()
 
 	HOME_DIR = t.TempDir()
-	ALIAS_FILE_PATH = path.Join(HOME_DIR, ".zshrc")
+	ZSH_ALIAS_FILE_PATH = path.Join(HOME_DIR, ".zshrc")
+	UNSUPPORTED_SHELL_ALIAS_FILE_PATH = path.Join(HOME_DIR, ".unsupportedrc")
 
-	t.Log("ALIAS_FILE_PATH", ALIAS_FILE_PATH)
+	t.Log("ALIAS_FILE_PATH", ZSH_ALIAS_FILE_PATH)
 }
 
 func createNonEmptyConfig(t *testing.T) {
 	t.Helper()
 
-	f, err := os.Create(ALIAS_FILE_PATH)
+	f, err := os.Create(ZSH_ALIAS_FILE_PATH)
 
 	if err != nil {
 		t.Log("Could not create an empty temp config file")
@@ -133,24 +178,45 @@ func createNonEmptyConfig(t *testing.T) {
 func assertAppendedAlias(aliasLine string, t *testing.T) {
 	t.Helper()
 
-	assertFileSize(aliasLine, t)
 	assertAliasHasBeenSaved(aliasLine, t)
-
+	assertFileSize(aliasLine, t)
 }
 
 func assertAliasHasBeenSaved(want string, t *testing.T) {
-	got := getLastLine(ALIAS_FILE_PATH, t)
+	t.Helper()
+
+	got := getLastLine(ZSH_ALIAS_FILE_PATH, t)
+
+	fmt.Println("shell", os.Getenv("SHELL"))
+	fmt.Println("last line", got)
+	fmt.Println("want line", want)
 
 	if want != got {
-		t.Errorf("Want %q, got %q", want, got)
+		t.Fatalf("Want %q, got %q", want, got)
+	}
+}
+
+func assertNoAliasAdded(t *testing.T) {
+	t.Helper()
+
+	want := ORIGINAL_LAST_LINE
+	got := getLastLine(ZSH_ALIAS_FILE_PATH, t)
+
+	if want != got {
+		t.Fatalf("Want %q, got %q", want, got)
 	}
 }
 
 func assertFileSize(appendedLine string, t *testing.T) {
 	t.Helper()
 
-	want := getFileSize(ALIAS_FILE_PATH, t)
+	want := getFileSize(ZSH_ALIAS_FILE_PATH, t)
 	got := len(ORIGINAL_LAST_LINE) + len(appendedLine)
+
+	fmt.Println("ZSH_ALIAS_FILE_PATH", ZSH_ALIAS_FILE_PATH)
+	fmt.Println("len(ORIGINAL_LAST_LINE)", len(ORIGINAL_LAST_LINE))
+	fmt.Println("want", want)
+	fmt.Println("got", got)
 
 	if want <= got {
 		t.Fatalf("Wanted the content of the config file to grow, not get replaced. Want: %v, got: %v", want, got)
