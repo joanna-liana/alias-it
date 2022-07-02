@@ -11,38 +11,22 @@ import (
 	"testing"
 )
 
-const HOME_DIR = "test_home"
 const ORIGINAL_LAST_LINE = "<add alias after this line>"
+
+var HOME_DIR string
+var ALIAS_FILE_PATH string
 
 var homeDirResolver = func() (string, error) {
 	return HOME_DIR, nil
 }
 
-var ALIAS_FILE_PATH = path.Join(HOME_DIR, ".zshrc")
-
 var output bytes.Buffer
-
-func TestMain(m *testing.M) {
-	setUp()
-
-	exitCode := m.Run()
-
-	cleanUp()
-	os.Exit(exitCode)
-}
-
-func setUp() {
-	os.RemoveAll(HOME_DIR)
-	os.Mkdir(HOME_DIR, 0777)
-}
-
-func cleanUp() {
-	os.RemoveAll(HOME_DIR)
-}
 
 func TestCLI(t *testing.T) {
 	t.Run("Appends an alias to the shell config file", func(t *testing.T) {
 		// given
+		setUpPaths(t)
+
 		os.Args = []string{"TEST_CMD", "testAliasName", "echo $PWD"}
 
 		createNonEmptyConfig(t)
@@ -95,6 +79,7 @@ func TestCLI(t *testing.T) {
 
 		t.Run("Does not add any alias if args are missing - "+tt.warning, func(t *testing.T) {
 			// given
+			setUpPaths(t)
 			createNonEmptyConfig(t)
 
 			os.Args = []string{"TEST_CMD"}
@@ -117,18 +102,30 @@ func TestCLI(t *testing.T) {
 	}
 }
 
+func setUpPaths(t *testing.T) {
+	t.Helper()
+
+	HOME_DIR = t.TempDir()
+	ALIAS_FILE_PATH = path.Join(HOME_DIR, ".zshrc")
+
+	t.Log("ALIAS_FILE_PATH", ALIAS_FILE_PATH)
+}
+
 func createNonEmptyConfig(t *testing.T) {
 	t.Helper()
 
 	f, err := os.Create(ALIAS_FILE_PATH)
 
 	if err != nil {
+		t.Log("Could not create an empty temp config file")
 		panic(err)
 	}
 
 	defer f.Close()
 
 	if _, err := f.WriteString(ORIGINAL_LAST_LINE); err != nil {
+
+		t.Log("Could not write to an empty temp config file")
 		panic(err)
 	}
 }
@@ -156,7 +153,7 @@ func assertFileSize(appendedLine string, t *testing.T) {
 	got := len(ORIGINAL_LAST_LINE) + len(appendedLine)
 
 	if want <= got {
-		t.Fatal("Wanted the content of the config file to grow, not get replaced")
+		t.Fatalf("Wanted the content of the config file to grow, not get replaced. Want: %v, got: %v", want, got)
 	}
 }
 
