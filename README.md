@@ -12,6 +12,8 @@ Grab your `alias-it` binary from [the Releases page](https://github.com/joanna-l
 alias-it <alias_name> <command_name>
 ```
 
+The command will add the alias to your default shell (`$SHELL`).
+
 ## Supported shells
 
 `zsh` and `bash`.
