@@ -16,7 +16,11 @@ const ORIGINAL_LAST_LINE = "<add alias after this line>"
 
 var HOME_DIR string
 var ZSH_ALIAS_FILE_PATH string
+var BASH_ALIAS_FILE_PATH string
 var UNSUPPORTED_SHELL_ALIAS_FILE_PATH string
+
+var TEST_SHELL_PATH = "/bin/zsh"
+var TEST_SHELL_CONFIG_FILE = ".zshrc"
 
 var homeDirResolver = func() (string, error) {
 	return HOME_DIR, nil
@@ -25,30 +29,47 @@ var homeDirResolver = func() (string, error) {
 var output bytes.Buffer
 
 func TestCLI(t *testing.T) {
-	supportedShellPaths := []string{
-		"/bin/zsh",
-		"/usr/bin/zsh",
+	supportedShellPathCases := []struct {
+		shellName      string
+		aliasPath      *string
+		supportedPaths []string
+	}{
+		{
+			shellName:      "ZSH",
+			aliasPath:      &ZSH_ALIAS_FILE_PATH,
+			supportedPaths: []string{"/bin/zsh", "/usr/bin/zsh"},
+		},
+		{
+			shellName:      "bash",
+			aliasPath:      &BASH_ALIAS_FILE_PATH,
+			supportedPaths: []string{"/bin/bash", "/usr/bin/bash"},
+		},
 	}
 
-	for _, shellPath := range supportedShellPaths {
-		t.Run("Appends an alias to the shell config file (ZSH)", func(t *testing.T) {
-			// given
-			os.Setenv("SHELL", shellPath)
-			setUpPaths(t)
-			setValidCliArgs()
+	for _, tt := range supportedShellPathCases {
+		for _, shellPath := range tt.supportedPaths {
+			t.Run("Appends an alias to the shell config file - "+tt.shellName+"("+shellPath+")", func(t *testing.T) {
 
-			createNonEmptyConfig(t)
+				// given
+				TEST_SHELL_PATH = shellPath
 
-			aliasCli := cli.New(&output, homeDirResolver)
+				setUpEnv(t)
+				setUpPaths(t)
+				setValidCliArgs()
 
-			want := "alias testAliasName=\"echo $PWD\""
+				createNonEmptyConfig(t)
 
-			// when
-			aliasCli.Add()
+				aliasCli := cli.New(&output, homeDirResolver)
 
-			// then
-			assertAppendedAlias(want, t)
-		})
+				want := "alias testAliasName=\"echo $PWD\""
+
+				// when
+				aliasCli.Add()
+
+				// then
+				assertAppendedAlias(t, *tt.aliasPath, want)
+			})
+		}
 	}
 
 	t.Run("Does not add any alias if the shell is not ZSH", func(t *testing.T) {
@@ -143,7 +164,7 @@ func setValidCliArgs() {
 func setUpEnv(t *testing.T) {
 	t.Helper()
 
-	os.Setenv("SHELL", "/bin/zsh")
+	os.Setenv("SHELL", TEST_SHELL_PATH)
 }
 
 func setUpPaths(t *testing.T) {
@@ -151,45 +172,42 @@ func setUpPaths(t *testing.T) {
 
 	HOME_DIR = t.TempDir()
 	ZSH_ALIAS_FILE_PATH = path.Join(HOME_DIR, ".zshrc")
+	BASH_ALIAS_FILE_PATH = path.Join(HOME_DIR, ".bashrc")
 	UNSUPPORTED_SHELL_ALIAS_FILE_PATH = path.Join(HOME_DIR, ".unsupportedrc")
-
-	t.Log("ALIAS_FILE_PATH", ZSH_ALIAS_FILE_PATH)
 }
 
 func createNonEmptyConfig(t *testing.T) {
 	t.Helper()
 
-	f, err := os.Create(ZSH_ALIAS_FILE_PATH)
+	for _, path := range []string{ZSH_ALIAS_FILE_PATH, BASH_ALIAS_FILE_PATH} {
+		f, err := os.Create(path)
 
-	if err != nil {
-		t.Log("Could not create an empty temp config file")
-		panic(err)
-	}
+		if err != nil {
+			t.Log("Could not create an empty temp config file: " + path)
+			panic(err)
+		}
 
-	defer f.Close()
+		defer f.Close()
 
-	if _, err := f.WriteString(ORIGINAL_LAST_LINE); err != nil {
+		if _, err := f.WriteString(ORIGINAL_LAST_LINE); err != nil {
 
-		t.Log("Could not write to an empty temp config file")
-		panic(err)
+			t.Log("Could not write to an empty temp config file: " + path)
+			panic(err)
+		}
 	}
 }
 
-func assertAppendedAlias(aliasLine string, t *testing.T) {
+func assertAppendedAlias(t *testing.T, aliasPath string, aliasLine string) {
 	t.Helper()
 
-	assertAliasHasBeenSaved(aliasLine, t)
-	assertFileSize(aliasLine, t)
+	assertAliasHasBeenSaved(t, aliasPath, aliasLine)
+	assertFileSize(t, aliasPath, aliasLine)
 }
 
-func assertAliasHasBeenSaved(want string, t *testing.T) {
+func assertAliasHasBeenSaved(t *testing.T, aliasPath string, want string) {
 	t.Helper()
 
-	got := getLastLine(ZSH_ALIAS_FILE_PATH, t)
-
-	fmt.Println("shell", os.Getenv("SHELL"))
-	fmt.Println("last line", got)
-	fmt.Println("want line", want)
+	got := getLastLine(aliasPath, t)
 
 	if want != got {
 		t.Fatalf("Want %q, got %q", want, got)
@@ -207,16 +225,11 @@ func assertNoAliasAdded(t *testing.T) {
 	}
 }
 
-func assertFileSize(appendedLine string, t *testing.T) {
+func assertFileSize(t *testing.T, aliasPath string, appendedLine string) {
 	t.Helper()
 
-	want := getFileSize(ZSH_ALIAS_FILE_PATH, t)
+	want := getFileSize(aliasPath, t)
 	got := len(ORIGINAL_LAST_LINE) + len(appendedLine)
-
-	fmt.Println("ZSH_ALIAS_FILE_PATH", ZSH_ALIAS_FILE_PATH)
-	fmt.Println("len(ORIGINAL_LAST_LINE)", len(ORIGINAL_LAST_LINE))
-	fmt.Println("want", want)
-	fmt.Println("got", got)
 
 	if want <= got {
 		t.Fatalf("Wanted the content of the config file to grow, not get replaced. Want: %v, got: %v", want, got)

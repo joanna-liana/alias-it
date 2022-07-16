@@ -17,6 +17,25 @@ type AliasCLI struct {
 	printer         io.Writer
 }
 
+var ErrUnsupportedShell = errors.New("unsupported shell, only ZSH is supported for now")
+
+type ShellName int64
+
+const (
+	Zsh ShellName = iota + 1
+	Bash
+)
+
+var shellConfigFile = map[ShellName]string{
+	Bash: ".bashrc",
+	Zsh:  ".zshrc",
+}
+
+var shellSuffixes = map[ShellName]string{
+	Bash: "/bash",
+	Zsh:  "/zsh",
+}
+
 func (cli AliasCLI) Add() {
 	command, aliasName, err := cli.parseArgs()
 
@@ -28,36 +47,45 @@ func (cli AliasCLI) Add() {
 		panic(err)
 	}
 
-	err = cli.ensureSupportedShell()
+	shellName, err := cli.ensureSupportedShell()
 
 	if err != nil {
-		if err.Error() == "unsupported shell, only ZSH is supported for now" {
+		if errors.Is(err, ErrUnsupportedShell) {
 			return
 		}
 
 		panic(err)
 	}
 
-	shellConfigPath := cli.getShellConfigPath(cli.homeDirResolver)
+	shellConfigPath := cli.getShellConfigPath(cli.homeDirResolver, shellName)
 
 	cli.addAlias(aliasName, command, shellConfigPath)
 }
 
-func (cli AliasCLI) ensureSupportedShell() error {
-	supportedShellSuffix := "/zsh\n"
+func (cli AliasCLI) ensureSupportedShell() (ShellName, error) {
 	shellPath, _ := exec.Command("echo", os.ExpandEnv("$SHELL")).Output()
 
-	errorString := "unsupported shell, only ZSH is supported for now"
+	var usedShellName ShellName
 
-	isUsingSupportedShell := bytes.HasSuffix(shellPath, []byte(supportedShellSuffix))
+	for shellName, suffix := range shellSuffixes {
+		isUsingSupportedShell := bytes.HasSuffix(shellPath, []byte(suffix+"\n"))
 
-	if !isUsingSupportedShell {
-		cli.println("Error:\t", errorString)
+		if !isUsingSupportedShell {
+			continue
+		}
 
-		return errors.New(errorString)
+		usedShellName = shellName
 	}
 
-	return nil
+	if usedShellName == 0 {
+		err := ErrUnsupportedShell
+
+		cli.println("Error:\t", err.Error())
+
+		return usedShellName, err
+	}
+
+	return usedShellName, nil
 }
 
 func New(printer io.Writer, homeDirResolver HomeDirResolver) *AliasCLI {
@@ -93,7 +121,7 @@ func (cli AliasCLI) parseArgs() (string, string, error) {
 	return command, aliasName, nil
 }
 
-func (cli AliasCLI) getShellConfigPath(homeDirResolver HomeDirResolver) string {
+func (cli AliasCLI) getShellConfigPath(homeDirResolver HomeDirResolver, shell ShellName) string {
 	homeDir, err := homeDirResolver()
 
 	if err != nil {
@@ -101,7 +129,7 @@ func (cli AliasCLI) getShellConfigPath(homeDirResolver HomeDirResolver) string {
 		panic(err)
 	}
 
-	shellConfigPath := path.Join(homeDir, ".zshrc")
+	shellConfigPath := path.Join(homeDir, shellConfigFile[shell])
 
 	return shellConfigPath
 }
@@ -122,9 +150,6 @@ func (cli AliasCLI) appendToShellConfig(shellConfigPath string, toAppend string)
 
 func (cli AliasCLI) addAlias(name, command, shellConfigPath string) {
 	aliasString := "\nalias " + name + "=\"" + command + "\""
-
-	fmt.Println("shellConfigPath", shellConfigPath)
-	fmt.Println("aliasString", aliasString)
 
 	cli.appendToShellConfig(shellConfigPath, aliasString)
 
