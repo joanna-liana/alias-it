@@ -72,7 +72,7 @@ func TestCLI(t *testing.T) {
 		}
 	}
 
-	t.Run("Does not add any alias if the shell is not ZSH", func(t *testing.T) {
+	t.Run("Does not add any alias if the shell is not supported", func(t *testing.T) {
 		// given
 		setValidCliArgs()
 
