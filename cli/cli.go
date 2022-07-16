@@ -155,7 +155,7 @@ func (cli AliasCLI) addAlias(name, command, shellConfigPath string) {
 
 	cli.printf("\nAdded alias:%v\n\n", aliasString)
 	cli.println("Hint: to prevent variable expansion, remember about prepending $ with a slash, e.g. $PWD -> \\$PWD")
-	cli.println("\n👉 Remember to run \"source ~/.zshrc\" or open a new terminal tab to start using your alias")
+	cli.println("\n👉 Remember to source you shell config file (e.g. \"source ~/.zshrc\")\nor open a new terminal tab to start using your alias")
 }
 
 func (cli AliasCLI) printf(format string, toPrint ...any) {
