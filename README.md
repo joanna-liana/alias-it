@@ -14,4 +14,4 @@ alias-it <alias_name> <command_name>
 
 ## Supported shells
 
-For now - only `zsh`.
+`zsh` and `bash`.
