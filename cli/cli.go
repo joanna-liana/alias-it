@@ -26,14 +26,14 @@ const (
 	Bash
 )
 
-var shellConfigFile = map[ShellName]string{
-	Bash: ".bashrc",
-	Zsh:  ".zshrc",
+type ShellProps struct {
+	configFileName string
+	pathSuffix     string
 }
 
-var shellSuffixes = map[ShellName]string{
-	Bash: "/bash",
-	Zsh:  "/zsh",
+var shellProps = map[ShellName]ShellProps{
+	Bash: {configFileName: ".bashrc", pathSuffix: "/bash"},
+	Zsh:  {configFileName: ".zshrc", pathSuffix: "/zsh"},
 }
 
 func (cli AliasCLI) Add() {
@@ -62,30 +62,30 @@ func (cli AliasCLI) Add() {
 	cli.addAlias(aliasName, command, shellConfigPath)
 }
 
-func (cli AliasCLI) ensureSupportedShell() (ShellName, error) {
+func (cli AliasCLI) ensureSupportedShell() (ShellProps, error) {
 	shellPath, _ := exec.Command("echo", os.ExpandEnv("$SHELL")).Output()
 
-	var usedShellName ShellName
+	var usedShell ShellProps
 
-	for shellName, suffix := range shellSuffixes {
-		isUsingSupportedShell := bytes.HasSuffix(shellPath, []byte(suffix+"\n"))
+	for _, shellProps := range shellProps {
+		isUsingSupportedShell := bytes.HasSuffix(shellPath, []byte(shellProps.pathSuffix+"\n"))
 
 		if !isUsingSupportedShell {
 			continue
 		}
 
-		usedShellName = shellName
+		usedShell = shellProps
 	}
 
-	if usedShellName == 0 {
+	if usedShell == (ShellProps{}) {
 		err := ErrUnsupportedShell
 
 		cli.println("Error:\t", err.Error())
 
-		return usedShellName, err
+		return usedShell, err
 	}
 
-	return usedShellName, nil
+	return usedShell, nil
 }
 
 func New(printer io.Writer, homeDirResolver HomeDirResolver) *AliasCLI {
@@ -121,7 +121,7 @@ func (cli AliasCLI) parseArgs() (string, string, error) {
 	return command, aliasName, nil
 }
 
-func (cli AliasCLI) getShellConfigPath(homeDirResolver HomeDirResolver, shell ShellName) string {
+func (cli AliasCLI) getShellConfigPath(homeDirResolver HomeDirResolver, shellProps ShellProps) string {
 	homeDir, err := homeDirResolver()
 
 	if err != nil {
@@ -129,7 +129,7 @@ func (cli AliasCLI) getShellConfigPath(homeDirResolver HomeDirResolver, shell Sh
 		panic(err)
 	}
 
-	shellConfigPath := path.Join(homeDir, shellConfigFile[shell])
+	shellConfigPath := path.Join(homeDir, shellProps.configFileName)
 
 	return shellConfigPath
 }
